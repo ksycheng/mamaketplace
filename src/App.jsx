@@ -60,7 +60,7 @@ const css = `
   .listing-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:20px; }
   .listing-card { background:#fff; border-radius:16px; border:1px solid var(--border); box-shadow:var(--shadow); overflow:hidden; cursor:pointer; transition:all 0.2s; }
   .listing-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); }
-  .listing-img { width:100%; height:180px; object-fit:cover; background:#f0ebe0; display:flex; align-items:center; justify-content:center; font-size:56px; }
+  .listing-img { width:100%; height:180px; object-fit:cover; background:#f0ebe0; display:flex; align-items:center; justify-content:center; font-size:56px; position:relative; }
   .listing-body { padding:14px; }
   .listing-title { font-size:15px; font-weight:800; margin-bottom:4px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .listing-price { font-size:20px; font-weight:900; color:var(--coral); margin-bottom:6px; }
@@ -131,11 +131,16 @@ function ListingCard({ listing, onClick }) {
         {listing.image_url
           ? <img src={listing.image_url} alt={listing.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           : <span>{cat.emoji}</span>}
+        <div style={{ position: "absolute", top: 8, left: 8 }}>
+          {listing.type === "trade" && <span style={{ background: "#7B8FD4", color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 99, fontFamily: "'Nunito',sans-serif" }}>🔄 TRADE</span>}
+          {(listing.type === "free" || listing.is_free) && <span style={{ background: "#6BBF7A", color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 99, fontFamily: "'Nunito',sans-serif" }}>🎁 FREE</span>}
+          {listing.type === "sell" && <span style={{ background: "#F4845F", color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 99, fontFamily: "'Nunito',sans-serif" }}>💰 SALE</span>}
+        </div>
       </div>
       <div className="listing-body">
         <div className="listing-title">{listing.title}</div>
         <div className="listing-price">
-          {listing.is_free ? <span style={{ color: "#6BBF7A" }}>FREE</span> : `$${listing.price} CAD`}
+          {listing.type === "free" || listing.is_free ? <span style={{ color: "#6BBF7A" }}>FREE</span> : listing.type === "trade" ? <span style={{ color: "#7B8FD4" }}>Trade</span> : `$${listing.price} CAD`}
         </div>
         <div className="listing-meta">
           <span>{cat.emoji} {cat.label}</span>
@@ -274,7 +279,11 @@ export default function App() {
   };
 
   const handlePost = async () => {
-    if (!postTitle || (!postPrice && !postFree && postType !== "free")) { setPostErr("Please fill in title and price."); return; }
+    if (!postTitle.trim()) { setPostErr("Please enter a title."); return; }
+    if (!postLocation.trim()) { setPostErr("Please enter your city/location."); return; }
+    if (!postDesc.trim()) { setPostErr("Please add a description."); return; }
+    if (postType === "sell" && !postPrice) { setPostErr("Please enter a price."); return; }
+    if (postType === "trade" && !postPrice.trim()) { setPostErr("Please enter what you're looking to trade for."); return; }
     setPostErr(""); setPostLoading(true);
     let image_url = null;
     if (postImage) {
@@ -291,12 +300,13 @@ export default function App() {
       seller_name: profile?.name || user.email,
       title: postTitle,
       description: postDesc,
-      price: postFree || postType === "free" ? 0 : parseFloat(postPrice),
-      is_free: postFree || postType === "free",
+      price: postType === "free" ? 0 : postType === "trade" ? 0 : parseFloat(postPrice),
+      is_free: postType === "free",
       category: postCat,
       condition: postCond,
       location: postLocation,
       type: postType,
+      trade_for: postType === "trade" ? postPrice : null,
       image_url,
       active: true,
     });
@@ -307,6 +317,31 @@ export default function App() {
       setTimeout(() => { setShowPostModal(false); setPostSuccess(""); }, 2000);
     } else { setPostErr("Failed to post. Please try again."); }
     setPostLoading(false);
+  };
+
+  const handleDeleteListing = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this listing?")) return;
+    await supabase.from("listings").update({ active: false }).eq("id", id);
+    fetchMyListings(); fetchListings();
+    showToast("Listing deleted.");
+  };
+
+  const [editListing, setEditListing] = useState(null);
+
+  const handleEditSave = async () => {
+    if (!editListing.title.trim()) { alert("Title is required."); return; }
+    if (!editListing.location.trim()) { alert("Location is required."); return; }
+    await supabase.from("listings").update({
+      title: editListing.title,
+      description: editListing.description,
+      price: editListing.type === "sell" ? parseFloat(editListing.price) : 0,
+      location: editListing.location,
+      condition: editListing.condition,
+      category: editListing.category,
+    }).eq("id", editListing.id);
+    setEditListing(null);
+    fetchMyListings(); fetchListings();
+    showToast("Listing updated!");
   };
 
   const startConversation = async (listing) => {
@@ -560,8 +595,30 @@ export default function App() {
                 <button className="btn btn-primary" onClick={() => setShowPostModal(true)} style={{ marginTop: 8 }}>Post your first item</button>
               </div>
             ) : (
-              <div className="listing-grid">
-                {myListings.map(l => <ListingCard key={l.id} listing={l} onClick={setSelectedListing} />)}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {myListings.map(l => {
+                  const cat = CATEGORIES.find(c => c.id === l.category) || CATEGORIES[8];
+                  return (
+                    <div key={l.id} className="card" style={{ padding: 16, display: "flex", gap: 16, alignItems: "center" }}>
+                      <div style={{ width: 72, height: 72, borderRadius: 12, background: cat.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, flexShrink: 0, overflow: "hidden" }}>
+                        {l.image_url ? <img src={l.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : cat.emoji}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2 }}>{l.title}</div>
+                        <div style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>{cat.emoji} {cat.label} · 📍 {l.location}</div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                          {l.type === "trade" && <span style={{ background: "#EEF1FB", color: "#7B8FD4", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99 }}>🔄 Trade</span>}
+                          {l.type === "free" && <span style={{ background: "#E8F7EC", color: "#6BBF7A", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99 }}>🎁 Free</span>}
+                          {l.type === "sell" && <span style={{ background: "#FEE8E2", color: "#F4845F", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 99 }}>💰 ${l.price}</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                        <button className="btn-ghost" style={{ fontSize: 13, padding: "8px 14px" }} onClick={() => setEditListing({ ...l })}>✏️ Edit</button>
+                        <button className="btn-ghost" style={{ fontSize: 13, padding: "8px 14px", color: "#c0392b", borderColor: "#f5c0c0" }} onClick={() => handleDeleteListing(l.id)}>🗑️ Delete</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -637,10 +694,16 @@ export default function App() {
               </select>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {postType !== "free" && (
+              {postType === "sell" && (
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Price (CAD) *</label>
                   <input className="input" type="number" placeholder="25.00" value={postPrice} onChange={e => setPostPrice(e.target.value)} />
+                </div>
+              )}
+              {postType === "trade" && (
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Looking to trade for</label>
+                  <input className="input" placeholder="e.g. Size 6 winter jacket..." value={postPrice} onChange={e => setPostPrice(e.target.value)} />
                 </div>
               )}
               <div className="form-group" style={{ margin: 0 }}>
@@ -673,6 +736,50 @@ export default function App() {
             <button className="btn btn-primary" style={{ width: "100%", fontSize: 16 }} disabled={postLoading} onClick={handlePost}>
               {postLoading ? <span className="spinner" /> : "🎉 Post Listing"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT LISTING MODAL */}
+      {editListing && (
+        <div className="modal-bg" onClick={() => setEditListing(null)}>
+          <div className="modal slide-up" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setEditListing(null)}>✕</button>
+            <h2 style={{ fontFamily: "'Fredoka One',cursive", fontSize: 28, color: "var(--coral)", marginBottom: 24 }}>Edit Listing</h2>
+            <div className="form-group">
+              <label className="form-label">Title *</label>
+              <input className="input" value={editListing.title} onChange={e => setEditListing({ ...editListing, title: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Category</label>
+              <select className="select" value={editListing.category} onChange={e => setEditListing({ ...editListing, category: e.target.value })}>
+                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+              </select>
+            </div>
+            {editListing.type === "sell" && (
+              <div className="form-group">
+                <label className="form-label">Price (CAD)</label>
+                <input className="input" type="number" value={editListing.price} onChange={e => setEditListing({ ...editListing, price: e.target.value })} />
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Condition</label>
+              <select className="select" value={editListing.condition} onChange={e => setEditListing({ ...editListing, condition: e.target.value })}>
+                {CONDITIONS.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Location *</label>
+              <input className="input" value={editListing.location} onChange={e => setEditListing({ ...editListing, location: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <textarea className="textarea" value={editListing.description} onChange={e => setEditListing({ ...editListing, description: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleEditSave}>💾 Save Changes</button>
+              <button className="btn-ghost" onClick={() => setEditListing(null)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
