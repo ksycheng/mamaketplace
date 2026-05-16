@@ -324,7 +324,7 @@ export default function App() {
       {/* NAV */}
       <nav className="nav">
         <div className="nav-inner">
-          <div className="nav-logo" onClick={() => setPage("home")}><img src="/logo.png" alt="Mamaketplace" style={{height:44, objectFit:"contain"}} /></div>
+          <div className="nav-logo" onClick={() => setPage("home")} style={{backgroundImage:"url('/logo.png')", backgroundSize:"contain", backgroundRepeat:"no-repeat", width:180, height:44}}></div>
           <div className="nav-links">
             <button className={`nav-link ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>Browse</button>
             <button className={`nav-link ${page === "about" ? "active" : ""}`} onClick={() => setPage("about")}>Our Story</button>
