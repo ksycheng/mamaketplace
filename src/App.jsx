@@ -223,10 +223,11 @@ export default function App() {
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   const fetchUnreadCount = async (uid) => {
-    const { data: convs } = await supabase.from("conversations").select("id, last_message_read_at, updated_at").or(`user1_id.eq.${uid},user2_id.eq.${uid}`);
+    const { data: convs } = await supabase.from("conversations").select("id, last_message_read_at, updated_at, user1_id, user2_id").or(`user1_id.eq.${uid},user2_id.eq.${uid}`);
     if (convs) {
       const unread = convs.filter(c => {
-        if (!c.last_message_read_at) return !!c.updated_at;
+        if (!c.updated_at) return false;
+        if (!c.last_message_read_at) return false;
         return new Date(c.updated_at) > new Date(c.last_message_read_at);
       }).length;
       setUnreadCount(unread);
@@ -269,6 +270,9 @@ export default function App() {
   const fetchMessages = async (convId) => {
     const { data } = await supabase.from("messages").select("*").eq("conversation_id", convId).order("created_at", { ascending: true });
     if (data) setMessages(data);
+    // Mark conversation as read
+    await supabase.from("conversations").update({ last_message_read_at: new Date().toISOString() }).eq("id", convId);
+    if (user) fetchUnreadCount(user.id);
   };
 
   const handleLogin = async () => {
@@ -588,6 +592,22 @@ export default function App() {
                         <div style={{ fontWeight: 800, fontSize: 15 }}>{selectedConv.other_user?.name || "User"}</div>
                         <div style={{ fontSize: 12, color: "var(--coral)", fontWeight: 700, marginTop: 2 }}>📦 Re: {selectedConv.listing?.title || "Listing"}</div>
                       </div>
+                      {selectedConv.listing && (
+                        <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "#fff", display: "flex", alignItems: "center", gap: 12 }}>
+                          {(() => {
+                            const cat = CATEGORIES.find(c => c.id === selectedConv.listing.category) || CATEGORIES[8];
+                            return (
+                              <>
+                                <div style={{ width: 48, height: 48, borderRadius: 10, background: cat.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>{cat.emoji}</div>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: 14 }}>{selectedConv.listing.title}</div>
+                                  <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{cat.label}</div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                       <div style={{ flex: 1, overflowY: "auto", padding: 20 }} className="msg-list">
                         {messages.map(msg => (
                           <div key={msg.id} className={`msg-row ${msg.sender_id === user.id ? "mine" : ""}`}>
