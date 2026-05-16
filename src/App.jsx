@@ -110,6 +110,8 @@ const css = `
     .nav-links { display:none; }
     .listing-grid { grid-template-columns:1fr 1fr; gap:12px; }
   }
+  .toast { position:fixed; bottom:32px; left:50%; transform:translateX(-50%); background:#2C2C2A; color:#fff; padding:14px 28px; border-radius:99px; font-size:15px; font-weight:700; z-index:999; box-shadow:0 8px 32px rgba(0,0,0,0.2); animation:toastIn 0.3s ease both; font-family:'Nunito',sans-serif; display:flex; align-items:center; gap:8px; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
 `;
 
 function Avatar({ name, size = 32, bg = "#F4845F" }) {
@@ -156,6 +158,7 @@ export default function App() {
   const [screen, setScreen] = useState("splash");
   const [page, setPage] = useState("home");
   const [authMode, setAuthMode] = useState("login");
+  const [toast, setToast] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPass, setAuthPass] = useState("");
   const [authName, setAuthName] = useState("");
@@ -209,6 +212,8 @@ export default function App() {
     setFilteredListings(filtered);
   }, [listings, selectedCat, searchQ]);
 
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
   const fetchProfile = async (uid) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", uid).single();
     setProfile(data);
@@ -243,6 +248,7 @@ export default function App() {
     setAuthErr(""); setAuthLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPass });
     if (error) setAuthErr("Invalid email or password.");
+    else { setPage("home"); showToast("👋 Welcome back! You're signed in."); }
     setAuthLoading(false);
   };
 
@@ -254,7 +260,8 @@ export default function App() {
     if (data.user) {
       await supabase.from("profiles").upsert({ id: data.user.id, name: authName, email: authEmail.trim() });
       setUser(data.user); setProfile({ id: data.user.id, name: authName });
-      setScreen("main");
+      setScreen("main"); setPage("home");
+      showToast("🎉 Welcome to Mamaketplace, " + authName + "!");
     }
     setAuthLoading(false);
   };
@@ -320,6 +327,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--cream)" }}>
       <style>{css}</style>
+      {toast && <div className="toast">✅ {toast}</div>}
 
       {/* NAV */}
       <nav className="nav">
