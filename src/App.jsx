@@ -164,6 +164,7 @@ export default function App() {
   const [page, setPage] = useState("home");
   const [authMode, setAuthMode] = useState("login");
   const [toast, setToast] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
   const [authEmail, setAuthEmail] = useState("");
   const [authPass, setAuthPass] = useState("");
   const [authName, setAuthName] = useState("");
@@ -221,10 +222,29 @@ export default function App() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
+  const fetchUnreadCount = async (uid) => {
+    const { data: convs } = await supabase.from("conversations").select("id, last_message_read_at, updated_at").or(`user1_id.eq.${uid},user2_id.eq.${uid}`);
+    if (convs) {
+      const unread = convs.filter(c => {
+        if (!c.last_message_read_at) return !!c.updated_at;
+        return new Date(c.updated_at) > new Date(c.last_message_read_at);
+      }).length;
+      setUnreadCount(unread);
+    }
+  };
+
   const fetchProfile = async (uid) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", uid).single();
     setProfile(data);
     setScreen("main");
+    fetchUnreadCount(uid);
+    // Real-time subscription for new messages
+    supabase.channel("messages-channel").on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+      if (payload.new.sender_id !== uid) {
+        showToast("💬 You have a new message!");
+        fetchUnreadCount(uid);
+      }
+    }).subscribe();
   };
 
   const fetchListings = async () => {
@@ -313,8 +333,9 @@ export default function App() {
     if (!error) {
       setPostSuccess("🎉 Listing posted successfully!");
       setPostTitle(""); setPostDesc(""); setPostPrice(""); setPostLocation(""); setPostFree(false); setPostImage(null); setPostImagePreview(null);
-      fetchListings();
-      setTimeout(() => { setShowPostModal(false); setPostSuccess(""); }, 2000);
+      await fetchListings();
+      showToast("🎉 Your listing is live!");
+      setTimeout(() => { setShowPostModal(false); setPostSuccess(""); setPage("home"); }, 1500);
     } else { setPostErr("Failed to post. Please try again."); }
     setPostLoading(false);
   };
@@ -384,7 +405,12 @@ export default function App() {
           <div className="nav-links">
             <button className={`nav-link ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>Browse</button>
             <button className={`nav-link ${page === "about" ? "active" : ""}`} onClick={() => setPage("about")}>Our Story</button>
-            {user && <button className={`nav-link ${page === "messages" ? "active" : ""}`} onClick={() => { setPage("messages"); fetchConversations(); }}>💬 Messages</button>}
+            {user && (
+              <button className={`nav-link ${page === "messages" ? "active" : ""}`} onClick={() => { setPage("messages"); fetchConversations(); setUnreadCount(0); }} style={{ position: "relative" }}>
+                💬 Messages
+                {unreadCount > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: "#c0392b", color: "#fff", fontSize: 10, fontWeight: 800, width: 16, height: 16, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>{unreadCount}</span>}
+              </button>
+            )}
             {user && <button className={`nav-link ${page === "mylistings" ? "active" : ""}`} onClick={() => { setPage("mylistings"); fetchMyListings(); }}>My Listings</button>}
           </div>
           <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
@@ -543,7 +569,8 @@ export default function App() {
                         <Avatar name={conv.other_user?.name || "?"} size={40} bg="#F4845F" />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 2 }}>{conv.other_user?.name || "User"}</div>
-                          <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conv.last_message || conv.listing?.title || "New conversation"}</div>
+                          <div style={{ fontSize: 11, color: "var(--coral)", fontWeight: 700, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>📦 {conv.listing?.title || "Item"}</div>
+                          <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conv.last_message || "New conversation"}</div>
                         </div>
                       </div>
                     ))}
@@ -557,13 +584,14 @@ export default function App() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", fontWeight: 800, fontSize: 15, background: "var(--coral-light)" }}>
-                        💬 Conversation about listing
+                      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", background: "var(--coral-light)" }}>
+                        <div style={{ fontWeight: 800, fontSize: 15 }}>{selectedConv.other_user?.name || "User"}</div>
+                        <div style={{ fontSize: 12, color: "var(--coral)", fontWeight: 700, marginTop: 2 }}>📦 Re: {selectedConv.listing?.title || "Listing"}</div>
                       </div>
                       <div style={{ flex: 1, overflowY: "auto", padding: 20 }} className="msg-list">
                         {messages.map(msg => (
                           <div key={msg.id} className={`msg-row ${msg.sender_id === user.id ? "mine" : ""}`}>
-                            {msg.sender_id !== user.id && <Avatar name="?" size={28} bg="#6BBF7A" />}
+                            {msg.sender_id !== user.id && <Avatar name={selectedConv.other_user?.name || "?"} size={28} bg="#6BBF7A" />}
                             <div className={`msg-bubble ${msg.sender_id === user.id ? "mine" : "theirs"}`}>{msg.text}</div>
                           </div>
                         ))}
