@@ -182,6 +182,8 @@ export default function App() {
   const [postLocation, setPostLocation] = useState("");
   const [postFree, setPostFree] = useState(false);
   const [postType, setPostType] = useState("sell");
+  const [postImage, setPostImage] = useState(null);
+  const [postImagePreview, setPostImagePreview] = useState(null);
   const [postLoading, setPostLoading] = useState(false);
   const [postErr, setPostErr] = useState("");
   const [postSuccess, setPostSuccess] = useState("");
@@ -272,24 +274,35 @@ export default function App() {
   };
 
   const handlePost = async () => {
-    if (!postTitle || (!postPrice && !postFree)) { setPostErr("Please fill in title and price."); return; }
+    if (!postTitle || (!postPrice && !postFree && postType !== "free")) { setPostErr("Please fill in title and price."); return; }
     setPostErr(""); setPostLoading(true);
+    let image_url = null;
+    if (postImage) {
+      const ext = postImage.name.split(".").pop();
+      const fileName = `${user.id}-${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage.from("listings").upload(fileName, postImage);
+      if (!uploadErr) {
+        const { data } = supabase.storage.from("listings").getPublicUrl(fileName);
+        image_url = data.publicUrl;
+      }
+    }
     const { error } = await supabase.from("listings").insert({
       user_id: user.id,
       seller_name: profile?.name || user.email,
       title: postTitle,
       description: postDesc,
-      price: postFree ? 0 : parseFloat(postPrice),
-      is_free: postFree,
+      price: postFree || postType === "free" ? 0 : parseFloat(postPrice),
+      is_free: postFree || postType === "free",
       category: postCat,
       condition: postCond,
       location: postLocation,
       type: postType,
+      image_url,
       active: true,
     });
     if (!error) {
       setPostSuccess("🎉 Listing posted successfully!");
-      setPostTitle(""); setPostDesc(""); setPostPrice(""); setPostLocation(""); setPostFree(false);
+      setPostTitle(""); setPostDesc(""); setPostPrice(""); setPostLocation(""); setPostFree(false); setPostImage(null); setPostImagePreview(null);
       fetchListings();
       setTimeout(() => { setShowPostModal(false); setPostSuccess(""); }, 2000);
     } else { setPostErr("Failed to post. Please try again."); }
@@ -644,6 +657,18 @@ export default function App() {
             <div className="form-group">
               <label className="form-label">Description</label>
               <textarea className="textarea" placeholder="Describe the item — size, brand, any wear and tear..." value={postDesc} onChange={e => setPostDesc(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Photo</label>
+              <div style={{ border: "2px dashed var(--border)", borderRadius: 12, padding: 16, textAlign: "center", cursor: "pointer", background: "#fafafa" }} onClick={() => document.getElementById("imgUpload").click()}>
+                {postImagePreview ? (
+                  <img src={postImagePreview} alt="preview" style={{ maxHeight: 160, borderRadius: 8, objectFit: "contain" }} />
+                ) : (
+                  <div><div style={{ fontSize: 32, marginBottom: 8 }}>📷</div><p style={{ fontSize: 14, color: "var(--muted)", fontWeight: 700 }}>Click to add a photo</p><p style={{ fontSize: 12, color: "#aaa" }}>JPG, PNG up to 5MB</p></div>
+                )}
+                <input id="imgUpload" type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files[0]; if (f) { setPostImage(f); setPostImagePreview(URL.createObjectURL(f)); } }} />
+              </div>
+              {postImagePreview && <button className="btn-ghost" style={{ marginTop: 8, width: "100%", fontSize: 13 }} onClick={() => { setPostImage(null); setPostImagePreview(null); }}>Remove photo</button>}
             </div>
             <button className="btn btn-primary" style={{ width: "100%", fontSize: 16 }} disabled={postLoading} onClick={handlePost}>
               {postLoading ? <span className="spinner" /> : "🎉 Post Listing"}
