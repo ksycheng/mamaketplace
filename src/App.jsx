@@ -324,7 +324,7 @@ export default function App() {
       {/* NAV */}
       <nav className="nav">
         <div className="nav-inner">
-          <div className="nav-logo" onClick={() => setPage("home")}><img src="/src/logo-transparent-png.png" alt="Mamaketplace" style={{ height: 44, objectFit: "contain" }} /></div>
+          <div className="nav-logo" onClick={() => setPage("home")}><img src="/logo.png" alt="Mamaketplace" style={{ height: 44, objectFit: "contain" }} /></div>
           <div className="nav-links">
             <button className={`nav-link ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>Browse</button>
             <button className={`nav-link ${page === "about" ? "active" : ""}`} onClick={() => setPage("about")}>Our Story</button>
@@ -352,7 +352,7 @@ export default function App() {
           <div className="fade-in">
             {/* Hero */}
             <div className="hero">
-              <img src="/src/logo-transparent-png.png" alt="Mamaketplace" style={{ height: 120, objectFit: "contain", marginBottom: 12 }} />
+              <img src="/logo.png" alt="Mamaketplace" style={{ height: 120, objectFit: "contain", marginBottom: 12 }} />
               <h1>Canada's Marketplace<br/>for Kids</h1>
               <p>Buy, sell, trade & discover children's items, classes, camps and more — right in your community.</p>
               <div className="search-bar">
