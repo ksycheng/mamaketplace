@@ -352,7 +352,7 @@ export default function App() {
           <div className="fade-in">
             {/* Hero */}
             <div className="hero">
-              <div style={{ fontSize: 56, marginBottom: 12 }}>👧🧒👦🧒</div>
+              <img src="https://raw.githubusercontent.com/ksycheng/mamaketplace/master/public/logo.png" alt="Mamaketplace" style={{height:140, objectFit:"contain", marginBottom:12}} />
               <h1>Canada's Marketplace<br/>for Kids</h1>
               <p>Buy, sell, trade & discover children's items, classes, camps and more — right in your community.</p>
               <div className="search-bar">
